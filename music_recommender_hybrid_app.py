@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 from sklearn.metrics.pairwise import cosine_similarity
 
+
 # ---------------------------
 # STREAMLIT CONFIG
 # ---------------------------
@@ -12,14 +13,16 @@ st.set_page_config(page_title="Hybrid Music Recommender (Mood-Based)", layout="w
 st.title("🎧 Hybrid Music Recommendation System (Mood-Based)")
 st.write("Hybrid = Content Similarity + Collaborative Filtering + Mood Filter")
 
-# ---------------------------
-# PATH CONFIG
-# ---------------------------
-SAVE_DIR = r"E:\Music Recommendation\Hybrid model"
 
-SONGS_PATH = os.path.join(SAVE_DIR, "songs_df.joblib")
-FEATURE_PATH = os.path.join(SAVE_DIR, "feature_matrix.joblib")
-ITEM_USERS_PATH = os.path.join(SAVE_DIR, "item_users_dict.joblib")
+# ---------------------------
+# PATH CONFIG (CLOUD SAFE)
+# ---------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SONGS_PATH = os.path.join(BASE_DIR, "songs_df.joblib")
+FEATURE_PATH = os.path.join(BASE_DIR, "feature_matrix.joblib")
+ITEM_USERS_PATH = os.path.join(BASE_DIR, "item_users_dict.joblib")
+
 
 # ---------------------------
 # LOAD ARTIFACTS
@@ -31,7 +34,10 @@ def load_artifacts():
     item_users = joblib.load(ITEM_USERS_PATH)
     return df, feature_matrix, item_users
 
+
+# ✅ IMPORTANT: Call function
 df, feature_matrix, item_users = load_artifacts()
+
 
 # ---------------------------
 # BASIC CLEANUP
@@ -49,10 +55,13 @@ required_mood_cols = [
     "danceability", "energy", "valence", "tempo",
     "speechiness", "instrumentalness", "acousticness", "liveness"
 ]
+
 for c in required_mood_cols:
     if c not in df.columns:
         df[c] = 0
+
 df[required_mood_cols] = df[required_mood_cols].fillna(0)
+
 
 # ---------------------------
 # SESSION STATE (Single Audio Player)
@@ -63,10 +72,12 @@ if "play_url" not in st.session_state:
 if "now_playing_title" not in st.session_state:
     st.session_state.now_playing_title = None
 
+
 # ---------------------------
-# MOOD FILTER FUNCTION
+# MOOD FILTER
 # ---------------------------
-def apply_mood_filter(df_in: pd.DataFrame, mood: str) -> pd.DataFrame:
+def apply_mood_filter(df_in, mood):
+
     mood = mood.lower().strip()
 
     if mood == "study":
@@ -119,25 +130,28 @@ def apply_mood_filter(df_in: pd.DataFrame, mood: str) -> pd.DataFrame:
     else:
         return df_in
 
+
 # ---------------------------
-# COLLABORATIVE SIMILARITY (JACCARD)
+# COLLABORATIVE (JACCARD)
 # ---------------------------
-def jaccard_similarity(item_a: int, item_b: int, item_users_dict: dict) -> float:
-    users_a = item_users_dict.get(item_a, set())
-    users_b = item_users_dict.get(item_b, set())
+def jaccard_similarity(a, b, users_dict):
+
+    users_a = users_dict.get(a, set())
+    users_b = users_dict.get(b, set())
 
     if not users_a or not users_b:
         return 0.0
 
-    inter = len(users_a & users_b)
-    union = len(users_a | users_b)
-    return inter / union if union != 0 else 0.0
+    return len(users_a & users_b) / len(users_a | users_b)
+
 
 # ---------------------------
-# SEARCH FUNCTION (NO RAPIDFUZZ)
+# SEARCH
 # ---------------------------
-def search_songs(df_in: pd.DataFrame, query: str, max_results=50) -> pd.DataFrame:
+def search_songs(df_in, query, max_results=50):
+
     q = query.strip().lower()
+
     if not q:
         return df_in.head(max_results)
 
@@ -146,43 +160,43 @@ def search_songs(df_in: pd.DataFrame, query: str, max_results=50) -> pd.DataFram
         df_in["artist"].str.lower().str.contains(q, regex=False) |
         df_in["genre"].str.lower().str.contains(q, regex=False)
     )
+
     return df_in[mask].head(max_results)
+
 
 # ---------------------------
 # HYBRID RECOMMENDER
 # ---------------------------
 def get_hybrid_recommendations(
-    selected_idx: int,
-    df_full: pd.DataFrame,
+    selected_idx,
+    df_full,
     feature_matrix,
-    item_users_dict: dict,
-    alpha: float = 0.3,
-    top_k: int = 10,
-    mood: str = "None"
+    item_users_dict,
+    alpha=0.3,
+    top_k=10,
+    mood="None"
 ):
-    # Mood filtered candidates
+
     df_candidates = df_full.copy()
+
     if mood != "None":
         df_candidates = apply_mood_filter(df_candidates, mood)
 
     candidate_indices = df_candidates.index.tolist()
 
-    # Fallback if too few candidates
     if len(candidate_indices) < top_k + 1:
         candidate_indices = df_full.index.tolist()
 
-    # Content similarity
     base_vec = feature_matrix[selected_idx]
     cand_mat = feature_matrix[candidate_indices]
+
     content_scores = cosine_similarity(base_vec, cand_mat).flatten()
 
-    # Collaborative similarity
     collab_scores = np.array([
-        jaccard_similarity(selected_idx, cand_idx, item_users_dict)
-        for cand_idx in candidate_indices
-    ], dtype=np.float32)
+        jaccard_similarity(selected_idx, i, item_users_dict)
+        for i in candidate_indices
+    ])
 
-    # Hybrid score
     hybrid_scores = alpha * collab_scores + (1 - alpha) * content_scores
 
     ranked = sorted(
@@ -192,108 +206,124 @@ def get_hybrid_recommendations(
     )
 
     ranked = [r for r in ranked if r[0] != selected_idx]
+
     return ranked[:top_k]
 
-# ---------------------------
-# UI (FRONT PAGE)
-# ---------------------------
-colA, colB, colC = st.columns([2, 1, 1])
 
-with colA:
-    query = st.text_input("🔎 Search song (name / artist / genre)", "")
+# ---------------------------
+# UI
+# ---------------------------
+col1, col2, col3 = st.columns([2, 1, 1])
 
-with colB:
+with col1:
+    query = st.text_input("🔎 Search Song")
+
+with col2:
     mood_choice = st.selectbox(
-        "🎭 Select Mood",
+        "🎭 Mood",
         ["None", "Study", "Dance", "Happy", "Sad", "Relax", "Party", "Workout"]
     )
 
-with colC:
+with col3:
     top_k = st.slider("Top-K", 1, 20, 10)
 
-alpha = st.slider("⚖ Hybrid Weight α (Collaborative vs Content)", 0.0, 1.0, 0.3, 0.05)
+alpha = st.slider("⚖ Hybrid Weight", 0.0, 1.0, 0.3, 0.05)
+
 
 results = search_songs(df, query)
-st.write(f"✅ Found **{len(results)}** matching songs (showing up to 50)")
+
+st.write(f"Found {len(results)} songs")
 
 if len(results) == 0:
-    st.warning("No matching songs found. Try a different search.")
+    st.warning("No songs found")
     st.stop()
 
-# Song selection
-options = results.apply(lambda r: f"{r['name']} — {r['artist']} ({r.get('genre','')})", axis=1).tolist()
-selected_option = st.selectbox("🎵 Select a song", options)
 
-selected_row = results.iloc[options.index(selected_option)]
+options = results.apply(
+    lambda r: f"{r['name']} — {r['artist']}",
+    axis=1
+).tolist()
+
+selected = st.selectbox("🎵 Select Song", options)
+
+selected_row = results.iloc[options.index(selected)]
 selected_idx = int(selected_row.name)
 
+
 # ---------------------------
-# SELECTED SONG DISPLAY (NO AUTO PLAY)
+# SELECTED SONG
 # ---------------------------
-st.subheader("🎶 Selected Song")
-c1, c2 = st.columns([2, 2])
+st.subheader("Selected Song")
+
+c1, c2 = st.columns(2)
 
 with c1:
-    st.markdown(f"### **{selected_row['name']}**")
-    st.write(f"**Artist:** {selected_row['artist']}")
-    st.write(f"**Genre:** {selected_row.get('genre','-')}")
-    st.write(f"**Year:** {selected_row.get('year','-')}")
-    st.write(f"**Track ID:** {selected_row.get('track_id','-')}")
+    st.write("**Name:**", selected_row["name"])
+    st.write("**Artist:**", selected_row["artist"])
+    st.write("**Genre:**", selected_row.get("genre", "-"))
+    st.write("**Year:**", selected_row.get("year", "-"))
 
 with c2:
-    selected_preview = selected_row.get("spotify_preview_url", "")
-    if isinstance(selected_preview, str) and selected_preview.startswith("http"):
-        if st.button("▶ Play Selected Song Preview", key="play_selected"):
-            st.session_state.play_url = selected_preview
+    url = selected_row.get("spotify_preview_url", "")
+
+    if isinstance(url, str) and url.startswith("http"):
+
+        if st.button("▶ Play Selected"):
+            st.session_state.play_url = url
             st.session_state.now_playing_title = f"{selected_row['name']} — {selected_row['artist']}"
-    else:
-        st.info("No Spotify preview available for this song.")
+
 
 # ---------------------------
 # RECOMMENDATIONS
 # ---------------------------
-st.subheader(f"🔥 Top {top_k} Recommendations (Mood: {mood_choice})")
+st.subheader("Recommendations")
 
 ranked = get_hybrid_recommendations(
-    selected_idx=selected_idx,
-    df_full=df,
-    feature_matrix=feature_matrix,
-    item_users_dict=item_users,
-    alpha=alpha,
-    top_k=top_k,
-    mood=mood_choice
+    selected_idx,
+    df,
+    feature_matrix,
+    item_users,
+    alpha,
+    top_k,
+    mood_choice
 )
 
-for i, (idx, hybrid_s, content_s, collab_s) in enumerate(ranked, start=1):
+for i, (idx, h, c, cf) in enumerate(ranked, 1):
+
     row = df.loc[idx]
 
     st.markdown(f"### {i}. {row['name']} — {row['artist']}")
-    st.write(f"Genre: {row.get('genre','-')} | Year: {row.get('year','-')}")
-    st.write(f"Hybrid Score: **{hybrid_s:.4f}** | Content: {content_s:.4f} | Collaborative: {collab_s:.4f}")
+    st.write(f"Hybrid: {h:.4f} | Content: {c:.4f} | CF: {cf:.4f}")
 
-    preview = row.get("spotify_preview_url", "")
-    if isinstance(preview, str) and preview.startswith("http"):
-        if st.button(f"▶ Play Preview {i}", key=f"play_{idx}"):
-            st.session_state.play_url = preview
+    url = row.get("spotify_preview_url", "")
+
+    if isinstance(url, str) and url.startswith("http"):
+
+        if st.button(f"▶ Play {i}", key=f"p{i}"):
+
+            st.session_state.play_url = url
             st.session_state.now_playing_title = f"{row['name']} — {row['artist']}"
-    else:
-        st.caption("No preview available.")
 
     st.divider()
 
+
 # ---------------------------
-# SINGLE NOW PLAYING PLAYER
+# AUDIO PLAYER
 # ---------------------------
 st.subheader("🎵 Now Playing")
 
 if st.session_state.play_url:
-    st.write(f"**Now Playing:** {st.session_state.now_playing_title}")
+
+    st.write(st.session_state.now_playing_title)
     st.audio(st.session_state.play_url)
-    if st.button("⏹ Stop", key="stop_audio"):
+
+    if st.button("⏹ Stop"):
         st.session_state.play_url = None
         st.session_state.now_playing_title = None
         st.rerun()
-else:
-    st.info("Click ▶ Play on any song preview to start playback.")
 
-st.success("✅ Recommendations generated successfully!")
+else:
+    st.info("Click Play to listen")
+
+
+st.success("✅ App Running Successfully")
