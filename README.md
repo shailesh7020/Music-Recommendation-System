@@ -26,7 +26,7 @@ tests/
 ## Run locally
 
 ```powershell
-py -3 -m pip install -e .
+py -3 -m pip install -e ".[dev]"
 streamlit run .\music_recommender_hybrid_app.py
 ```
 
@@ -39,6 +39,12 @@ py -3 -m music_recommender.healthcheck --base-dir .
 ```
 
 ## Tests
+
+```powershell
+py -3 -m pytest -q
+```
+
+If you prefer the standard-library test runner:
 
 ```powershell
 py -3 -m unittest discover -s tests -v
