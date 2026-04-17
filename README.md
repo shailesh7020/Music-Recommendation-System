@@ -1,61 +1,117 @@
-# Music Recommendation System
+# Pulsewave Monorepo
 
-This repository now has a production-ready foundation for a hybrid music recommender. The Streamlit app still provides the user interface, but the recommendation logic, artifact loading, validation, and health checks now live in a reusable Python package.
+Pulsewave is a full-stack music recommendation platform inspired by modern streaming products. It keeps the original Python recommendation work in the repository, but now adds a production-style monorepo with:
 
-## What changed
+- `apps/web`: Next.js + React + Tailwind + Framer Motion + Zustand + React Query
+- `apps/api`: FastAPI backend with auth, catalog, playlists, and hybrid recommendations
+- `apps/api/db/schema.sql`: PostgreSQL schema for a persistent production database
+- `docker-compose.yml`: local orchestration for web, API, Postgres, and Redis
 
-- Recommendation logic moved out of the Streamlit script into `music_recommender/`.
-- Artifact loading now validates file presence, row alignment, and collaborative-filtering keys.
-- Data normalization is explicit instead of being spread across the UI file.
-- Automated tests cover search, mood filtering, recommendation ranking, and artifact validation.
-- Project metadata and setup now live in `pyproject.toml`.
+The legacy Streamlit prototype still exists in `music_recommender_hybrid_app.py`, but the new primary product direction is the `apps/web` + `apps/api` stack.
 
-## Project layout
+## Product Highlights
+
+- Spotify-inspired dark UI with a branded Pulsewave visual system
+- Landing page, auth screens, home, search, recommendations, song, artist, album, playlist, library, and liked songs pages
+- Persistent bottom player with queue, seek, volume, shuffle, repeat, and keyboard shortcuts
+- Hybrid recommendation engine covering content-based, collaborative, mood-based, and genre-based strategies
+- Playlist CRUD endpoints, JWT auth scaffolding, sample content, and responsive layout patterns
+
+## Repository Layout
 
 ```text
+apps/
+  api/
+    app/
+      api/routes/
+      core/
+      data/
+      models/
+      services/
+    db/schema.sql
+    Dockerfile
+    requirements.txt
+  web/
+    src/app/
+    src/components/
+    src/lib/
+    src/providers/
+    src/store/
+    Dockerfile
 music_recommender/
-  artifacts.py
-  healthcheck.py
-  log.py
-  recommender.py
-  service.py
-music_recommender_hybrid_app.py
 tests/
+docker-compose.yml
 ```
 
-## Run locally
+## Backend APIs
+
+Main routes live under `/api`.
+
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/catalog/home`
+- `GET /api/catalog/search?q=...`
+- `GET /api/catalog/songs/{song_id}`
+- `GET /api/catalog/artists/{artist_id}`
+- `GET /api/catalog/albums/{album_id}`
+- `GET /api/catalog/playlists/{playlist_id}`
+- `GET /api/recommendations`
+- `GET /api/recommendations/songs/{song_id}/similar`
+- `GET /api/recommendations/moods/{mood}`
+- `GET /api/recommendations/genres/{genre}`
+- `POST /api/playlists`
+- `PATCH /api/playlists/{playlist_id}`
+- `POST /api/playlists/{playlist_id}/songs/{song_id}`
+- `POST /api/playlists/{playlist_id}/reorder`
+- `POST /api/playlists/{playlist_id}/duplicate`
+
+## Local Development
+
+### API
 
 ```powershell
-py -3 -m pip install -e ".[dev]"
-streamlit run .\music_recommender_hybrid_app.py
+py -3 -m pip install -r .\apps\api\requirements.txt
+py -3 -m uvicorn apps.api.app.main:app --reload
 ```
 
-## Health check
-
-Use this before deployment to confirm the serialized artifacts are present and internally consistent.
+### Web
 
 ```powershell
-py -3 -m music_recommender.healthcheck --base-dir .
+cd .\apps\web
+npm install
+npm run dev
 ```
+
+### Docker
+
+```powershell
+docker compose up --build
+```
+
+## Recommendation Engine
+
+The backend recommendation engine combines:
+
+1. Content-based similarity using audio feature vectors and metadata overlap
+2. Collaborative filtering from shared listener profiles
+3. Mood-based and genre-based ranking overlays
+4. Hybrid scoring with human-readable reasons for why each song appears
+
+The core logic lives in [recommendation_service.py](</E:/Music-Recommendation-System/apps/api/app/services/recommendation_service.py:1>).
 
 ## Tests
 
-```powershell
-py -3 -m pytest -q
-```
-
-If you prefer the standard-library test runner:
+Verified locally in this environment:
 
 ```powershell
 py -3 -m unittest discover -s tests -v
 ```
 
-## Industrialization roadmap
+That covers the original recommender tests plus the new backend recommendation and token helpers.
 
-This refactor improves the codebase substantially, but a truly industrial deployment would still benefit from:
+## Notes
 
-1. CI/CD for tests, linting, packaging, and deployment.
-2. Artifact versioning and a dedicated data/model registry instead of large binaries in the repo root.
-3. Observability for latency, error rates, recommendation quality, and user behavior.
-4. A service boundary for online inference if the app needs to support multiple clients.
-5. Security and secrets management for any future Spotify or backend integrations.
+- This workspace did not have Node.js available during implementation, so the Next.js app was scaffolded but not executed locally here.
+- The FastAPI routes are scaffolded for production-style usage, but because FastAPI dependencies were not installed in this workspace session, route boot verification was limited to static/syntax checks and service-layer tests.
+- The sample data in `apps/api/app/data/sample_seed.py` is designed to make the full product demonstrable immediately.

@@ -9,3 +9,12 @@ dist/
 .tmp_pycache/
 .ipynb_checkpoints/
 .streamlit/secrets.toml
+.next/
+node_modules/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+apps/api/.venv/
+tmp_artifacts__uwj4w9c/
+tmp_artifacts_fzl3zad3/
+*.pyc
